@@ -4351,8 +4351,31 @@ class DiscordAdapter(BasePlatformAdapter):
         # knows what the support request is about even if the user just says "@daimon help"
         if is_thread and self._is_forum_parent(getattr(message.channel, "parent", None)):
             _thread_title = getattr(message.channel, "name", None)
+            _context_parts = []
             if _thread_title and _thread_title.strip():
-                event_text = f"[Forum post: {_thread_title}]\n\n{event_text}"
+                _context_parts.append(f"[Forum post: {_thread_title}]")
+
+            # If this is the first time the bot is responding in this thread,
+            # fetch prior messages so the agent has full context of the conversation
+            if thread_id and thread_id not in self._threads:
+                try:
+                    _prior_msgs = []
+                    async for msg in message.channel.history(limit=20, before=message):
+                        if msg.author != self._client.user:
+                            _author = msg.author.display_name
+                            _content = msg.content.strip()
+                            if _content:
+                                _prior_msgs.append(f"{_author}: {_content}")
+                    if _prior_msgs:
+                        _prior_msgs.reverse()
+                        _context_parts.append("[Thread history]")
+                        _context_parts.extend(_prior_msgs)
+                        _context_parts.append("[End of history — user is now asking you:]")
+                except Exception as _e:
+                    logger.debug("[Discord] Failed to fetch thread history: %s", _e)
+
+            if _context_parts:
+                event_text = "\n".join(_context_parts) + "\n\n" + event_text
 
         # Defense-in-depth: prevent empty user messages from entering session
         # (can happen when user sends @mention-only with no other text)
