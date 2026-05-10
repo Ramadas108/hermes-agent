@@ -1506,13 +1506,18 @@ def _cprint(text: str):
         _pt_print(_PT_ANSI(text))
         return
 
-    # Cross-thread emission: ask the app's event loop to schedule a
-    # ``run_in_terminal`` that wraps ``_pt_print``.  This hides the
-    # prompt, prints, and redraws.  Fire-and-forget — if scheduling
-    # fails we fall back to a direct print so the line isn't lost.
+    # Track the returned Task so the inner ``run()`` coroutine isn't
+    # garbage-collected before the event loop executes it, which would
+    # trigger ``RuntimeWarning: coroutine 'run_in_terminal.<locals>.run'
+    # was never awaited`` (observed during ``/new`` session resets).
+    if not hasattr(_cprint, "_pending_tasks"):
+        _cprint._pending_tasks = set()
+
     def _schedule():
         try:
-            run_in_terminal(lambda: _pt_print(_PT_ANSI(text)))
+            _task = run_in_terminal(lambda: _pt_print(_PT_ANSI(text)))
+            _cprint._pending_tasks.add(_task)
+            _task.add_done_callback(_cprint._pending_tasks.discard)
         except Exception:
             try:
                 _pt_print(_PT_ANSI(text))
