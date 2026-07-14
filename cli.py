@@ -1808,6 +1808,44 @@ def _run_state_db_auto_maintenance(session_db) -> None:
         except Exception as _finalize_exc:
             logger.debug("Orphan compression finalize skipped: %s", _finalize_exc)
 
+        # One-time state.db orphan reap (closes sessions whose owning process
+        # died without calling db.end_session, plus retires the corresponding
+        # OV registry row when the session's OV dir already has content).
+        # 2026-07-12: prevents accumulation of api_server + cli orphans from
+        # crashed/killed processes. Run once per schema bump.
+        try:
+            if not session_db.get_meta("state_db_orphan_reap_v1"):
+                try:
+                    from hermes_scripts.state_db_reaper import run_once  # type: ignore
+                except ImportError:
+                    import importlib.util as _ilu
+                    _spec = _ilu.spec_from_file_location(
+                        "state_db_reaper",
+                        str(_hermes_home_maint / "scripts" / "state_db_reaper.py"),
+                    )
+                    if _spec is None or _spec.loader is None:
+                        raise RuntimeError("state_db_reaper spec unavailable")
+                    _mod = _ilu.module_from_spec(_spec)
+                    _spec.loader.exec_module(_mod)
+                    run_once = _mod.run_once  # type: ignore[attr-defined]
+                summary = run_once(min_age_hours=24, apply=True, batch_size=200)
+                if summary.get("errors", 0) == 0:
+                    session_db.set_meta("state_db_orphan_reap_v1", "1")
+                else:
+                    logger.warning(
+                        "state.db orphan reap v1 had %d errors; will retry on next startup",
+                        summary.get("errors", 0),
+                    )
+                if summary.get("state_db_closed", 0) or summary.get("registry_retired", 0):
+                    logger.info(
+                        "state.db orphan reap v1: closed=%d retired=%d errors=%d",
+                        summary.get("state_db_closed", 0),
+                        summary.get("registry_retired", 0),
+                        summary.get("errors", 0),
+                    )
+        except Exception as _reap_exc:
+            logger.debug("state.db orphan reap skipped: %s", _reap_exc)
+
         cfg = (_load_full_config().get("sessions") or {})
         if not cfg.get("auto_prune", False):
             return
@@ -13922,13 +13960,21 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
 
         @kb.add('up', filter=_normal_input)
         def history_up(event):
-            """Up arrow: browse history when on first line, else move cursor up."""
-            event.app.current_buffer.auto_up(count=event.arg)
+            """Up arrow: browse history when buffer is empty, else move cursor up."""
+            buf = event.app.current_buffer
+            if buf.text:
+                buf.cursor_up()
+            else:
+                buf.auto_up(count=event.arg)
 
         @kb.add('down', filter=_normal_input)
         def history_down(event):
-            """Down arrow: browse history when on last line, else move cursor down."""
-            event.app.current_buffer.auto_down(count=event.arg)
+            """Down arrow: browse history when buffer is empty, else move cursor down."""
+            buf = event.app.current_buffer
+            if buf.text:
+                buf.cursor_down()
+            else:
+                buf.auto_down(count=event.arg)
 
         @kb.add('c-l')
         def handle_ctrl_l(event):
