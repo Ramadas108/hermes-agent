@@ -2231,6 +2231,12 @@ DEFAULT_CONFIG = {
         },
         "openai": {
             "model": "whisper-1",  # whisper-1, gpt-4o-mini-transcribe, gpt-4o-transcribe
+            # Optional ISO-639-1 language code ("en", "fr", "es", ...) to
+            # bias the OpenAI Whisper transcription. Empty/omitted means
+            # "let the upstream API auto-detect". This is independent of
+            # ``stt.deepinfra.language`` — DeepInfra does NOT inherit
+            # this value; pin its own language under ``stt.deepinfra``.
+            "language": "",
         },
         "mistral": {
             "model": "voxtral-mini-latest",  # voxtral-mini-latest, voxtral-mini-2602

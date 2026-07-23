@@ -1353,6 +1353,7 @@ def _transcribe_openai(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     provider_label: str = "openai",
+    language: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Transcribe via the OpenAI ``audio.transcriptions.create`` SDK shape.
 
@@ -1361,6 +1362,12 @@ def _transcribe_openai(
     ``base_url`` to skip the OpenAI-only auth chain, and a
     ``provider_label`` so the response carries the right ``provider``
     name.
+
+    ``language`` is provider-scoped — it is the caller's responsibility to
+    resolve the appropriate per-provider config (e.g. ``stt.openai.language``
+    vs ``stt.deepinfra.language``). Empty / whitespace-only values are
+    treated as unset and omitted from the SDK call so the upstream API
+    can auto-detect.
     """
     if api_key is None:
         try:
@@ -1383,12 +1390,21 @@ def _transcribe_openai(
         from openai import OpenAI, APIError, APIConnectionError, APITimeoutError
         client = OpenAI(api_key=api_key, base_url=base_url, timeout=30, max_retries=0)
         try:
+            # Build the SDK call kwargs. ``language`` is optional and
+            # provider-scoped — only forwarded when the caller provides a
+            # non-empty value (empty/whitespace means "not set", let the
+            # upstream API auto-detect).
             with open(file_path, "rb") as audio_file:
-                transcription = client.audio.transcriptions.create(
+                transcribe_kwargs: Dict[str, Any] = dict(
                     model=model_name,
                     file=audio_file,
                     response_format="text" if model_name == "whisper-1" else "json",
                 )
+                normalized_language = str(language or "").strip()
+                if normalized_language:
+                    transcribe_kwargs["language"] = normalized_language
+
+                transcription = client.audio.transcriptions.create(**transcribe_kwargs)
 
             transcript_text = _extract_transcript_text(transcription)
             logger.info(
@@ -1767,7 +1783,13 @@ def transcribe_audio(file_path: str, model: Optional[str] = None) -> Dict[str, A
     if provider == "openai":
         openai_cfg = stt_config.get("openai") or {}
         model_name = model or openai_cfg.get("model", DEFAULT_STT_MODEL)
-        return _transcribe_openai(file_path, model_name)
+        # Provider-scoped language: native OpenAI reads ``stt.openai.language``.
+        # Empty/whitespace-only values are treated as unset; the SDK call
+        # omits the kwarg so the upstream API can auto-detect.
+        openai_language = str(openai_cfg.get("language") or "").strip() or None
+        return _transcribe_openai(
+            file_path, model_name, language=openai_language,
+        )
 
     if provider == "mistral":
         mistral_cfg = stt_config.get("mistral") or {}
