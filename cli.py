@@ -3754,6 +3754,80 @@ def save_config_value(key_path: str, value: any) -> bool:
 
 
 # ============================================================================
+# Arrow-key history-guard helper
+# ============================================================================
+#
+# Lane C (v0.19.0): Up/Down on a multiline input must not silently recall
+# history when the buffer is non-empty. prompt_toolkit's ``Buffer.auto_up``
+# / ``auto_down`` decide whether to recall based on ``cursor_position_row``
+# (a logical-line index), not visual wrap rows. A single logical-line input
+# that wraps across multiple screen rows has ``cursor_position_row == 0``
+# everywhere, so auto_up would invoke ``history_backward`` from any cursor
+# position — corrupting the user's in-progress draft.
+#
+# True visual cursor movement across screen rows of a wrapped single
+# logical line is NOT achievable in this architecture: both
+# ``Buffer.cursor_up`` and ``Buffer.auto_up`` operate on the logical-line
+# model. The acceptance contract is therefore the safe no-history half:
+#
+#   * empty buffer         → history browse
+#   * non-empty buffer     → cursor move only (never history recall)
+#
+# This helper is a pure decision function so the contract is unit-testable
+# without spinning up a full prompt_toolkit Application. The keybinding
+# shim in ``HermesCLI.run()`` consults it and dispatches accordingly.
+
+
+def _history_navigation_action(buffer, direction):
+    """Decide what an Up/Down arrow should do in the multiline input.
+
+    Parameters
+    ----------
+    buffer : object
+        A prompt_toolkit ``Buffer`` (or duck-typed stub for tests). Must
+        expose a ``.text`` attribute.
+    direction : str
+        ``"up"`` or ``"down"``. Other values are treated defensively and
+        return ``"cursor"`` — better to do nothing visible than to recall
+        an unintended history entry.
+
+    Returns
+    -------
+    str
+        ``"history"`` — the arrow should call ``auto_up`` / ``auto_down``
+        (browse prompt history). Safe only when the buffer is empty.
+        ``"cursor"`` — the arrow should call ``cursor_up`` / ``cursor_down``
+        (logical-line cursor move) and MUST NOT touch history. This is the
+        guarded default for any non-empty buffer.
+
+    Contract decisions
+    -----------------
+    * "Empty" means ``text.strip() == ""``. A buffer of spaces, tabs, or
+      newlines is treated as editorially empty and routes to history.
+      This is a deliberate departure from the historical ``if buf.text:``
+      truthiness check, which treated whitespace-only buffers as
+      "non-empty." The whitespace policy is locked in by
+      ``test_whitespace_only_buffer_treated_as_empty`` in
+      ``tests/cli/test_arrow_navigation_history_guard.py``.
+    * "Cursor" never triggers history recall, regardless of cursor row.
+      This is the safe fallback for the wrapped-line case where
+      ``Buffer.auto_up`` would otherwise recall history from any visual
+      row position.
+    """
+    # Defensive: missing text attribute or non-string direction. Avoid
+    # AttributeError propagating into the keybinding shim.
+    try:
+        text = getattr(buffer, "text", "") or ""
+    except Exception:
+        text = ""
+    if text.strip():
+        return "cursor"
+    if direction not in ("up", "down"):
+        return "cursor"
+    return "history"
+
+
+# ============================================================================
 # HermesCLI Class
 # ============================================================================
 
@@ -13929,15 +14003,38 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
         @kb.add('up', filter=_normal_input)
         def history_up(event):
-            """Up arrow: browse history when on first line, else move cursor up."""
+            """Up arrow: route through the history-guard helper.
+
+            Empty buffer → ``auto_up`` (browse history).
+            Non-empty buffer → ``cursor_up`` (never recall history).
+
+            The no-history branch is a deliberate safe fallback for the
+            wrapped-line case: ``Buffer.auto_up`` uses ``cursor_position_row``
+            (logical line), so a single-logical-line input that visually
+            wraps across screen rows would otherwise recall history from
+            any cursor position. See ``_history_navigation_action``.
+            """
             buf = event.app.current_buffer
-            _recall_without_recollapse(buf, lambda: buf.auto_up(count=event.arg))
+            if _history_navigation_action(buf, "up") == "history":
+                _recall_without_recollapse(buf, lambda: buf.auto_up(count=event.arg))
+            else:
+                # Cursor move only — no history recall, no paste-collapse
+                # bookkeeping needed (text is unchanged).
+                buf.cursor_up()
 
         @kb.add('down', filter=_normal_input)
         def history_down(event):
-            """Down arrow: browse history when on last line, else move cursor down."""
+            """Down arrow: route through the history-guard helper.
+
+            Mirror of ``history_up`` — empty buffer browses history,
+            non-empty buffer only moves the cursor. See that handler
+            for the wrapped-line rationale.
+            """
             buf = event.app.current_buffer
-            _recall_without_recollapse(buf, lambda: buf.auto_down(count=event.arg))
+            if _history_navigation_action(buf, "down") == "history":
+                _recall_without_recollapse(buf, lambda: buf.auto_down(count=event.arg))
+            else:
+                buf.cursor_down()
 
         @kb.add('c-l')
         def handle_ctrl_l(event):
