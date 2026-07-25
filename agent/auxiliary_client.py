@@ -2710,6 +2710,72 @@ def _build_xai_oauth_aux_client(model: str) -> Tuple[Optional[Any], Optional[str
     return CodexAuxiliaryClient(real_client, model), model
 
 
+def _build_minimax_oauth_aux_client(model: str) -> Tuple[Optional[Any], Optional[str]]:
+    """Build an AnthropicAuxiliaryClient for a MiniMax OAuth-authenticated session.
+
+    MiniMax's Anthropic-compatible endpoint requires a fresh bearer token on
+    every request (the access token has a very short lifetime), so we use
+    :func:`resolve_minimax_oauth_runtime_credentials` with
+    ``as_token_provider=True`` to mint a per-call callable instead of a static
+    string.  ``build_anthropic_client`` already detects callable API keys and
+    installs the bearer-hook httpx client that mints a fresh token per request.
+
+    The caller must pass an explicit model — MiniMax's accepted-model list is
+    an undocumented, drifting allow-list, so any hardcoded default would
+    silently rot.  Returns ``(None, None)`` when the user has not authenticated
+    with MiniMax OAuth.
+
+    Regression: prior to this, ``resolve_provider_client("minimax-oauth")``
+    returned ``(None, None)`` because the generic OAuth branch in the resolver
+    only knew about ``nous``, ``openai-codex``, and ``xai-oauth``.  Auxiliary
+    tasks (compression, web_extract, session search, curator, etc.) silently
+    fell through to the user's Step-2 fallback provider, producing surprise
+    bills and the "configured auxiliary compression provider 'minimax-oauth'
+    is unavailable" warning.  See
+    ``taf/references/auxiliary-compression-minimax-oauth-unavailable-2026-07-11.md``
+    for the documented case.
+    """
+    if not model:
+        logger.warning(
+            "Auxiliary client: minimax-oauth requested without a model; "
+            "pass model explicitly (auxiliary.<task>.model in config.yaml)."
+        )
+        return None, None
+    try:
+        from hermes_cli.auth import resolve_minimax_oauth_runtime_credentials
+    except ImportError:
+        logger.debug("hermes_cli.auth not available for minimax-oauth")
+        return None, None
+    try:
+        creds = resolve_minimax_oauth_runtime_credentials(as_token_provider=True)
+    except Exception as exc:
+        logger.warning(
+            "resolve_provider_client: minimax-oauth requested but no valid "
+            "MiniMax OAuth token found (run: hermes model -> MiniMax OAuth): %s",
+            exc,
+        )
+        return None, None
+    api_key = creds["api_key"]  # callable token provider
+    base_url = creds["base_url"].rstrip("/")
+    logger.debug("Auxiliary client: MiniMax OAuth (%s via Anthropic API)", model)
+    try:
+        from agent.anthropic_adapter import build_anthropic_client
+        real_client = build_anthropic_client(api_key, base_url)
+    except ImportError as exc:
+        logger.warning(
+            "resolve_provider_client: minimax-oauth requested but the anthropic "
+            "SDK is not installed: %s", exc,
+        )
+        return None, None
+    except Exception as exc:
+        logger.warning(
+            "resolve_provider_client: minimax-oauth failed to build Anthropic "
+            "client: %s", exc,
+        )
+        return None, None
+    return AnthropicAuxiliaryClient(real_client, model, api_key, base_url, is_oauth=True), model
+
+
 def _build_codex_client(model: str) -> Tuple[Optional[Any], Optional[str]]:
     """Build a CodexAuxiliaryClient for an explicitly-requested model.
 
@@ -5031,6 +5097,23 @@ def resolve_provider_client(
         return (_to_async_client(client, final_model, is_vision=is_vision) if async_mode
                 else (client, final_model))
 
+    # MiniMax OAuth — Anthropic-compatible endpoint with a refreshable bearer
+    # token.  Without this branch, the generic oauth_external/oauth_minimax
+    # arm below returns (None, None) and every auxiliary task (compression,
+    # web_extract, session search, curator, etc.) silently falls through to
+    # the user's Step-2 fallback provider, producing surprise bills and the
+    # "configured auxiliary compression provider 'minimax-oauth' is
+    # unavailable" warning.  Regression test:
+    # tests/agent/test_auxiliary_minimax_oauth.py
+    if provider == "minimax-oauth":
+        client, default = _build_minimax_oauth_aux_client(model)
+        if client is None:
+            # _build_minimax_oauth_aux_client already logs the specific reason.
+            return None, None
+        final_model = _normalize_resolved_model(model or default, provider)
+        return (_to_async_client(client, final_model, is_vision=is_vision) if async_mode
+                else (client, final_model))
+
     # ── Custom endpoint (OPENAI_BASE_URL + OPENAI_API_KEY) ───────────
     if provider == "custom":
         custom_base = ""
@@ -5506,14 +5589,20 @@ def resolve_provider_client(
         return (_to_async_client(client, final_model, is_vision=is_vision) if async_mode
                 else (client, final_model))
 
-    elif pconfig.auth_type in {"oauth_device_code", "oauth_external"}:
-        # OAuth providers — route through their specific try functions
+    elif pconfig.auth_type in {"oauth_device_code", "oauth_external", "oauth_minimax"}:
+        # OAuth providers — route through their specific try functions.
+        # Real branches are handled above (xai-oauth @ 4895, minimax-oauth @
+        # ~4975) before this auth-type check, so reaching here means either an
+        # unrecognised OAuth provider (return None) or one of the legacy ones
+        # we still recurse into for back-compat.
         if provider == "nous":
             return resolve_provider_client("nous", model, async_mode)
         if provider == "openai-codex":
             return resolve_provider_client("openai-codex", model, async_mode)
         if provider == "xai-oauth":
             return resolve_provider_client("xai-oauth", model, async_mode)
+        if provider == "minimax-oauth":
+            return resolve_provider_client("minimax-oauth", model, async_mode)
         # Other OAuth providers not directly supported
         if provider not in _LOGGED_UNSUPPORTED_OAUTH_KEYS:
             _LOGGED_UNSUPPORTED_OAUTH_KEYS.add(provider)

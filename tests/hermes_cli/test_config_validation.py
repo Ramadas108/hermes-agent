@@ -242,6 +242,26 @@ class TestUnknownTopLevelKeys:
         assert _EXTRA_KNOWN_ROOT_KEYS.issubset(_KNOWN_ROOT_KEYS)
         assert _KNOWN_ROOT_KEYS == frozenset(DEFAULT_CONFIG.keys()) | _EXTRA_KNOWN_ROOT_KEYS
 
+    def test_runtime_consumed_optional_roots_are_not_reported_as_unknown(self):
+        """Raw gateway, CLI, and env-bridge roots must match validator schema."""
+        runtime_roots = {
+            "always_log_local": True,
+            "clarify": {"timeout": 120},
+            "filter_silence_narration": True,
+            "group_sessions_per_user": True,
+            "reset_triggers": ["/new"],
+            "stt_echo_transcripts": True,
+            "TELEGRAM_HOME_CHANNEL": "5550001111",
+            "TELEGRAM_HOME_CHANNEL_NAME": "Home",
+            "thread_sessions_per_user": False,
+            "write_sessions_json": True,
+        }
+
+        issues = validate_config_structure(runtime_roots)
+        unknown = [i.message for i in issues if "Unknown top-level config key" in i.message]
+
+        assert unknown == []
+
     def test_provider_like_unknown_root_keeps_misplaced_message(self):
         """Preserve existing base_url/api_key root-level guidance."""
         issues = validate_config_structure({

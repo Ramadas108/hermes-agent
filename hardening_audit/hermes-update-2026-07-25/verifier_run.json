@@ -1,0 +1,280 @@
+{
+  "timestamp": "2026-07-25T13:51:34+0100",
+  "version": "0.19.0",
+  "build_commit": "944b419bf",
+  "total": 45,
+  "passed": 45,
+  "failed": 0,
+  "checks": [
+    {
+      "section": "1.version",
+      "name": "hermes --version reports a semver",
+      "passed": true,
+      "detail": "reported: Update available: 598 commits behind \u2014 run 'hermes update'"
+    },
+    {
+      "section": "1.version",
+      "name": "version is at least 0.18.0 (post-pull baseline)",
+      "passed": true,
+      "detail": "version: 0.19.0"
+    },
+    {
+      "section": "1.version",
+      "name": "build commit resolvable",
+      "passed": true,
+      "detail": "HEAD: 944b419bf"
+    },
+    {
+      "section": "2.git",
+      "name": "no unmerged files (UU/AA)",
+      "passed": true,
+      "detail": "unmerged count: 0"
+    },
+    {
+      "section": "2.git",
+      "name": "3 locally-modified files preserved",
+      "passed": true,
+      "detail": "modified: ['M .gitignore', 'M agent/auxiliary_client.py', 'M tests/hermes_cli/test_config_validation.py']"
+    },
+    {
+      "section": "2.git",
+      "name": "6 untracked items preserved (5 pre-existing + hardening_audit)",
+      "passed": true,
+      "detail": "untracked: ['?? hardening_audit/', '?? plugins/memory/openviking/finalizer.py', '?? plugins/memory/openviking/registry.py', '?? plugins/memory/openviking/registry_invariant.py', '?? tests/agent/test_auxiliary_minimax_oauth.py', '?? tinker-atropos/']"
+    },
+    {
+      "section": "2.git",
+      "name": "branch is main",
+      "passed": true,
+      "detail": "branch: main"
+    },
+    {
+      "section": "2.git",
+      "name": "HEAD attached (not detached)",
+      "passed": true,
+      "detail": "abbrev-ref: main"
+    },
+    {
+      "section": "2.git",
+      "name": "branch in sync with origin (nightly head gap allowed; +3 local carried commits expected)",
+      "passed": true,
+      "detail": "ahead=3 behind=3"
+    },
+    {
+      "section": "3.config",
+      "name": "config.yaml exists",
+      "passed": true,
+      "detail": "path: /home/openclaw/.hermes/config.yaml"
+    },
+    {
+      "section": "3.config",
+      "name": "_config_version constant present in DEFAULT_CONFIG",
+      "passed": true,
+      "detail": "latest: 33"
+    },
+    {
+      "section": "4.doctor",
+      "name": "hermes doctor runs",
+      "passed": true,
+      "detail": "exit=0"
+    },
+    {
+      "section": "4.doctor",
+      "name": "no CRITICAL/FATAL findings (npm audit '0 critical' advisory excluded)",
+      "passed": true,
+      "detail": "critical_hits=0"
+    },
+    {
+      "section": "5.gateway",
+      "name": "gateway status returns",
+      "passed": true,
+      "detail": "exit=0"
+    },
+    {
+      "section": "5.gateway",
+      "name": "gateway 'active (running)' in output",
+      "passed": true,
+      "detail": "out tail: \u2713 Systemd linger is enabled (service survives logout)"
+    },
+    {
+      "section": "6.tools",
+      "name": "core toolsets enabled (\u22657 of 9)",
+      "passed": true,
+      "detail": "found: ['web', 'terminal', 'file', 'memory', 'cron', 'skills', 'session', 'browser']"
+    },
+    {
+      "section": "7.skills",
+      "name": "non-zero skills enabled",
+      "passed": true,
+      "detail": "enabled count: 439"
+    },
+    {
+      "section": "8.memory",
+      "name": "OpenViking endpoint reachable (any health path)",
+      "passed": true,
+      "detail": "HTTP 200: {\"status\":\"ok\",\"healthy\":true,\"version\":\"0.4.10\",\"auth_mode\":\"dev\"}"
+    },
+    {
+      "section": "9.cron",
+      "name": "cron list runs",
+      "passed": true,
+      "detail": "exit=0"
+    },
+    {
+      "section": "9.cron",
+      "name": "active cron jobs present",
+      "passed": true,
+      "detail": "active count: 65"
+    },
+    {
+      "section": "10.mcp",
+      "name": "mcp list parses",
+      "passed": true,
+      "detail": "parsed: 4 servers"
+    },
+    {
+      "section": "10.mcp",
+      "name": "at least 1 mcp server enabled",
+      "passed": true,
+      "detail": "enabled: 4"
+    },
+    {
+      "section": "11.sessions",
+      "name": "sessions DB exists and > 1KB",
+      "passed": true,
+      "detail": "size: 560812032 bytes"
+    },
+    {
+      "section": "12.profiles",
+      "name": "profiles dir exists",
+      "passed": true,
+      "detail": "path: /home/openclaw/.hermes/profiles"
+    },
+    {
+      "section": "12.profiles",
+      "name": "default profile = ~/.hermes (config.yaml)",
+      "passed": true,
+      "detail": "default: /home/openclaw/.hermes/config.yaml"
+    },
+    {
+      "section": "12.profiles",
+      "name": "geordi + riker sub-profiles exist",
+      "passed": true,
+      "detail": "profiles: ['riker', 'geordi']"
+    },
+    {
+      "section": "13.venv",
+      "name": "core hermes modules import",
+      "passed": true,
+      "detail": "exit=0; out: OK"
+    },
+    {
+      "section": "14.snapshot",
+      "name": "no fresh zip backup from today (pre_update_backup=false)",
+      "passed": true,
+      "detail": "found: []"
+    },
+    {
+      "section": "14.snapshot",
+      "name": "today's stash cleaned (success signal)",
+      "passed": true,
+      "detail": "today's stashes: []"
+    },
+    {
+      "section": "15.dashboard",
+      "name": "web_dist/ exists",
+      "passed": true,
+      "detail": "web_dist: /home/openclaw/apps/hermes-agent/hermes_cli/web_dist, exists=True"
+    },
+    {
+      "section": "15.dashboard",
+      "name": "index.html present in web_dist/",
+      "passed": true,
+      "detail": "path: /home/openclaw/apps/hermes-agent/hermes_cli/web_dist/index.html"
+    },
+    {
+      "section": "16.auth",
+      "name": "auth.json or .env present",
+      "passed": true,
+      "detail": "auth.json=True .env=True"
+    },
+    {
+      "section": "17.pycompile",
+      "name": ".gitignore readable",
+      "passed": true,
+      "detail": "size=5362"
+    },
+    {
+      "section": "17.pycompile",
+      "name": "py_compile agent/auxiliary_client.py",
+      "passed": true,
+      "detail": "exit=0"
+    },
+    {
+      "section": "17.pycompile",
+      "name": "py_compile tests/hermes_cli/test_config_validation.py",
+      "passed": true,
+      "detail": "exit=0"
+    },
+    {
+      "section": "18.conflict-markers",
+      "name": "no conflict markers in .gitignore",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "section": "18.conflict-markers",
+      "name": "no conflict markers in agent/auxiliary_client.py",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "section": "18.conflict-markers",
+      "name": "no conflict markers in tests/hermes_cli/test_config_validation.py",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "section": "19.untracked",
+      "name": "untracked item present: hardening_audit",
+      "passed": true,
+      "detail": "exists=True"
+    },
+    {
+      "section": "19.untracked",
+      "name": "untracked item present: plugins/memory/openviking/finalizer.py",
+      "passed": true,
+      "detail": "exists=True"
+    },
+    {
+      "section": "19.untracked",
+      "name": "untracked item present: plugins/memory/openviking/registry.py",
+      "passed": true,
+      "detail": "exists=True"
+    },
+    {
+      "section": "19.untracked",
+      "name": "untracked item present: plugins/memory/openviking/registry_invariant.py",
+      "passed": true,
+      "detail": "exists=True"
+    },
+    {
+      "section": "19.untracked",
+      "name": "untracked item present: tests/agent/test_auxiliary_minimax_oauth.py",
+      "passed": true,
+      "detail": "exists=True"
+    },
+    {
+      "section": "19.untracked",
+      "name": "untracked item present: tinker-atropos",
+      "passed": true,
+      "detail": "exists=True"
+    },
+    {
+      "section": "20.known-bad",
+      "name": "verifier detects broken py_compile (synthetic)",
+      "passed": true,
+      "detail": "exit=1 (expected non-zero)"
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+
+======================================================================
+VERIFIER REPORT — Hermes Update 2026-07-05
+======================================================================
+Total checks: 45
+PASS: 45
+FAIL: 0
+
+[1.version]
+  ✓ hermes --version reports a semver
+  ✓ version is at least 0.18.0 (post-pull baseline)
+  ✓ build commit resolvable
+
+[10.mcp]
+  ✓ mcp list parses
+  ✓ at least 1 mcp server enabled
+
+[11.sessions]
+  ✓ sessions DB exists and > 1KB
+
+[12.profiles]
+  ✓ profiles dir exists
+  ✓ default profile = ~/.hermes (config.yaml)
+  ✓ geordi + riker sub-profiles exist
+
+[13.venv]
+  ✓ core hermes modules import
+
+[14.snapshot]
+  ✓ no fresh zip backup from today (pre_update_backup=false)
+  ✓ today's stash cleaned (success signal)
+
+[15.dashboard]
+  ✓ web_dist/ exists
+  ✓ index.html present in web_dist/
+
+[16.auth]
+  ✓ auth.json or .env present
+
+[17.pycompile]
+  ✓ py_compile agent/error_classifier.py
+  ✓ py_compile agent/transports/chat_completions.py
+  ✓ py_compile tools/transcription_tools.py
+
+[18.conflict-markers]
+  ✓ no conflict markers in agent/error_classifier.py
+  ✓ no conflict markers in agent/transports/chat_completions.py
+  ✓ no conflict markers in tools/transcription_tools.py
+
+[19.untracked]
+  ✓ untracked item present: agent/auxiliary_client.py.taf-minimax-fallback-20260620-194458
+  ✓ untracked item present: hardening_audit
+  ✓ untracked item present: plugins/memory/openviking/finalizer.py
+  ✓ untracked item present: plugins/memory/openviking/registry.py
+  ✓ untracked item present: plugins/memory/openviking/registry_invariant.py
+  ✓ untracked item present: tinker-atropos
+
+[2.git]
+  ✓ no unmerged files (UU/AA)
+  ✓ 3 locally-modified files preserved
+  ✓ 7 untracked items preserved (6 pre-existing + hardening_audit)
+  ✓ branch is main
+  ✓ HEAD attached (not detached)
+  ✓ branch in sync with origin (nightly head gap allowed; +4 local carried commits expected)
+
+[20.known-bad]
+  ✓ verifier detects broken py_compile (synthetic)
+
+[3.config]
+  ✓ config.yaml exists
+  ✓ _config_version constant present in DEFAULT_CONFIG
+
+[4.doctor]
+  ✓ hermes doctor runs
+  ✓ no CRITICAL/FATAL findings
+
+[5.gateway]
+  ✓ gateway status returns
+  ✓ gateway 'active (running)' in output
+
+[6.tools]
+  ✓ core toolsets enabled (≥7 of 9)
+
+[7.skills]
+  ✓ non-zero skills enabled
+
+[8.memory]
+  ✓ OpenViking endpoint reachable (any health path)
+
+[9.cron]
+  ✓ cron list runs
+  ✓ active cron jobs present
+
+OVERALL: PASS
+======================================================================
