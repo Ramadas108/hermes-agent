@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+import sys
+sys.path.insert(0, "/home/openclaw/apps/hermes-agent")
+from hermes_cli.git_update import main
+raise SystemExit(main())
