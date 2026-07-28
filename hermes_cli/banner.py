@@ -881,3 +881,19 @@ def build_welcome_banner(console: "Console", model: str, cwd: str,
         console.print(_logo)
         console.print()
     console.print(outer_panel)
+
+
+# Deployment-aware update check override. Keep this at module end so all
+# existing callers use the same truthful Git calculation.
+def check_for_updates() -> Optional[int]:
+    from pathlib import Path as _Path
+    from hermes_cli.git_update import status as _git_status, status_text as _status_text
+    try:
+        _repo = _Path(__file__).resolve().parents[1]
+        _s = _git_status(_repo, fetch=True)
+        if _s.ahead:
+            print(f"⚠ {_status_text(_s)}. Run hermes-safe-update.")
+            return -1
+        return _s.behind
+    except Exception:
+        return None

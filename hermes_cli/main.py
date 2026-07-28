@@ -4688,7 +4688,7 @@ def _print_version_info(*, check_updates: bool = True) -> None:
         if behind and behind > 0:
             commits_word = "commit" if behind == 1 else "commits"
             print(
-                f"Update available: {behind} {commits_word} behind — "
+                f"Update available: {behind} upstream commits available; local deployment changes must be reconciled — "
                 f"run '{recommended_update_command()}'"
             )
         elif behind == 0:
@@ -11843,9 +11843,21 @@ def _discard_lockfile_churn(git_cmd, repo_root):
 
 
 def cmd_update(args):
-    """Update Hermes Agent to the latest version.
+    # Deployment-aware safety gate: never overwrite a named local deployment.
+    from pathlib import Path as _Path
+    from hermes_cli.git_update import status as _git_status, status_text as _status_text
+    try:
+        _s = _git_status(_Path(__file__).resolve().parents[1], fetch=True)
+        if _s.detached or _s.ahead:
+            print("Local deployment changes detected. Run hermes-safe-update.")
+            print(_status_text(_s))
+            return
+    except Exception as _exc:
+        print(f"Refusing automatic update: {_exc}")
+        return
 
-    Thin wrapper around ``_cmd_update_impl``: installs hangup protection,
+
+    """Thin wrapper around ``_cmd_update_impl``: installs hangup protection,
     runs the update, then restores stdio on the way out (even on
     ``sys.exit`` or unhandled exceptions).
     """
