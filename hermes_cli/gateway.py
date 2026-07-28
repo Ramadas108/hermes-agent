@@ -2534,6 +2534,66 @@ def get_python_path() -> str:
     return sys.executable
 
 
+def get_safe_python_path() -> str:
+    """Return a validated SQLite-safe launcher for managed POSIX gateways."""
+    if os.name != "posix":
+        return get_python_path()
+    candidates = []
+    configured = os.environ.get("HERMES_SAFE_PYTHON", "").strip()
+    if configured:
+        candidates.append(Path(configured).expanduser())
+    candidates.append(Path.home() / ".local" / "bin" / "hermes-python-safe")
+    resolved = shutil.which("hermes-python-safe")
+    if resolved:
+        candidates.append(Path(resolved))
+    seen = set()
+    for candidate in candidates:
+        try:
+            candidate = candidate.resolve()
+        except OSError:
+            continue
+        if candidate in seen or not candidate.is_file() or not os.access(candidate, os.X_OK):
+            continue
+        seen.add(candidate)
+        try:
+            result = subprocess.run(
+                [str(candidate), "--check-runtime"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=15,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if result.returncode == 0:
+            return str(candidate)
+    raise RuntimeError(
+        "Refusing to generate a Linux Hermes gateway unit: hermes-python-safe "
+        "is missing or failed its SQLite runtime check."
+    )
+
+
+def get_safe_sqlite_library_dir() -> str:
+    """Return the validated private SQLite library directory."""
+    candidates = []
+    configured = os.environ.get("HERMES_SAFE_SQLITE_LIB_DIR", "").strip()
+    if configured:
+        candidates.append(Path(configured).expanduser())
+    candidates.append(Path.home() / ".local" / "opt" / "sqlite-3.53.4" / "lib")
+    for directory in candidates:
+        try:
+            if (directory / "libsqlite3.so.3.53.4").is_file():
+                return str(directory.resolve())
+        except OSError:
+            continue
+    raise RuntimeError(
+        "Refusing to generate a Linux Hermes gateway unit: private SQLite "
+        "3.53.4 was not found."
+    )
+
+
 # =============================================================================
 # Systemd (Linux)
 # =============================================================================
@@ -2752,6 +2812,8 @@ def _systemd_watchdog_service_fields(
 
 def generate_systemd_unit(system: bool = False, run_as_user: str | None = None) -> str:
     python_path = get_python_path()
+    gateway_python_path = get_safe_python_path()
+    safe_sqlite_library_dir = get_safe_sqlite_library_dir()
     working_dir = _stable_service_working_dir()
     detected_venv = _detect_venv_dir()
     venv_dir = str(detected_venv) if detected_venv else str(PROJECT_ROOT / "venv")
@@ -2817,7 +2879,7 @@ StartLimitIntervalSec=0
 Type={systemd_type}
 {systemd_watchdog_directives}User={username}
 Group={group_name}
-ExecStart={python_path} -m hermes_cli.main{f" {profile_arg}" if profile_arg else ""} gateway run
+ExecStart={gateway_python_path} -m hermes_cli.main{f" {profile_arg}" if profile_arg else ""} gateway run --external-supervisor
 WorkingDirectory={working_dir}
 Environment="HOME={home_dir}"
 Environment="USER={username}"
@@ -2825,7 +2887,8 @@ Environment="LOGNAME={username}"
 Environment="PATH={sane_path}"
 Environment="VIRTUAL_ENV={venv_dir}"
 Environment="HERMES_HOME={hermes_home}"
-Restart=always
+Environment="LD_LIBRARY_PATH={safe_sqlite_library_dir}"
+Restart=on-failure
 RestartSec=5
 RestartForceExitStatus={GATEWAY_SERVICE_RESTART_EXIT_CODE}
 RestartPreventExitStatus={GATEWAY_FATAL_CONFIG_EXIT_CODE}
@@ -2858,12 +2921,13 @@ StartLimitIntervalSec=0
 
 [Service]
 Type={systemd_type}
-{systemd_watchdog_directives}ExecStart={python_path} -m hermes_cli.main{f" {profile_arg}" if profile_arg else ""} gateway run
+{systemd_watchdog_directives}ExecStart={gateway_python_path} -m hermes_cli.main{f" {profile_arg}" if profile_arg else ""} gateway run --external-supervisor
 WorkingDirectory={working_dir}
 Environment="PATH={sane_path}"
 Environment="VIRTUAL_ENV={venv_dir}"
 Environment="HERMES_HOME={hermes_home}"
-Restart=always
+Environment="LD_LIBRARY_PATH={safe_sqlite_library_dir}"
+Restart=on-failure
 RestartSec=5
 RestartForceExitStatus={GATEWAY_SERVICE_RESTART_EXIT_CODE}
 RestartPreventExitStatus={GATEWAY_FATAL_CONFIG_EXIT_CODE}

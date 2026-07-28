@@ -1,7 +1,7 @@
 """Tests for SessionDB WAL checkpoint strategy (issue #45383).
 
 Verifies that periodic checkpoints use PASSIVE mode (safe for large DBs)
-while close() and pre-VACUUM paths still use TRUNCATE.
+while close() leaves shared WAL state untouched.
 """
 
 import sqlite3
@@ -73,41 +73,28 @@ class TestTryWalCheckpointPassive:
         db._try_wal_checkpoint()
 
 
-class TestCloseUsesTruncate:
-    """close() should still use TRUNCATE to shrink WAL on shutdown."""
+class TestCloseDoesNotCheckpoint:
+    """close() must not mutate shared WAL state."""
 
-    def test_close_uses_truncate_mode(self, db):
-        """TRUNCATE at close is safe — no concurrent writers during shutdown."""
-        real_conn = db._conn
-        execute_calls = []
-
-        def tracking_execute(sql, *args, **kwargs):
-            execute_calls.append(sql)
-            return real_conn.execute(sql, *args, **kwargs)
-
+    def test_close_does_not_use_truncate_mode(self, db):
+        """Connection close only releases the connection; no checkpoint runs."""
         mock_conn = MagicMock()
-        mock_conn.execute.side_effect = tracking_execute
         db._conn = mock_conn
 
         db.close()
 
-        truncate_calls = [c for c in execute_calls if "wal_checkpoint(TRUNCATE)" in c]
-        assert len(truncate_calls) == 1, (
-            f"Expected 1 TRUNCATE checkpoint at close, got {len(truncate_calls)}"
-        )
+        mock_conn.execute.assert_not_called()
+        mock_conn.close.assert_called_once_with()
 
-    def test_close_logs_debug_on_failure(self, db, caplog):
-        """Failed TRUNCATE at close logs debug (not warning — close is best-effort)."""
+    def test_close_does_not_log_checkpoint_failure(self, db, caplog):
+        """There is no close-time checkpoint failure to log."""
         mock_conn = MagicMock()
-        mock_conn.execute.side_effect = sqlite3.OperationalError("database is locked")
         db._conn = mock_conn
 
         with caplog.at_level(logging.DEBUG):
             db.close()
 
-        assert any("WAL checkpoint (TRUNCATE) at close failed" in r.message for r in caplog.records), (
-            f"Expected debug log about TRUNCATE failure at close, got: {caplog.text}"
-        )
+        assert not any("WAL checkpoint" in r.message for r in caplog.records)
 
 
 class TestCheckpointFrequency:

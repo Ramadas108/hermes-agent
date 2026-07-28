@@ -347,6 +347,9 @@ _wal_fallback_warned_lock = threading.Lock()
 _wal_reset_bug_warned_paths: set[str] = set()
 _wal_reset_bug_warned_lock = threading.Lock()
 
+# Serialize journal-mode setup among gateway-owned SessionDB instances.
+_wal_setup_lock = threading.RLock()
+
 _FTS_TRIGGERS = (
     "messages_fts_insert",
     "messages_fts_delete",
@@ -580,6 +583,15 @@ def sqlite_source_id() -> str:
 
 
 def apply_wal_with_fallback(
+    conn: sqlite3.Connection,
+    *,
+    db_label: str = "state.db",
+) -> str:
+    with _wal_setup_lock:
+        return _apply_wal_with_fallback(conn, db_label=db_label)
+
+
+def _apply_wal_with_fallback(
     conn: sqlite3.Connection,
     *,
     db_label: str = "state.db",
@@ -2658,17 +2670,9 @@ class SessionDB:
             pass  # Best effort — never fatal.
 
     def close(self):
-        """Close the database connection.
-
-        Attempts a TRUNCATE WAL checkpoint first so that exiting processes
-        help shrink the WAL file.
-        """
+        """Close the database connection without altering shared WAL state."""
         with self._lock:
             if self._conn:
-                try:
-                    self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-                except Exception as exc:
-                    logger.debug("WAL checkpoint (TRUNCATE) at close failed: %s", exc)
                 self._conn.close()
                 self._conn = None
 
@@ -3224,21 +3228,7 @@ class SessionDB:
                 # reclaimed until a later VACUUM. Non-fatal.
                 logger.warning("VACUUM after FTS optimize failed: %s", exc)
                 vacuum_ok = False
-            # Best-effort: fold the WAL back into the main file so the on-disk
-            # size settles now rather than at close(). NOTE this is REFUSED
-            # (SQLITE_BUSY) while any other connection holds a WAL read-mark —
-            # e.g. a live gateway sharing the DB — so it is not sufficient on
-            # its own. Callers must therefore NOT size the result by stat()ing
-            # the file; use :meth:`logical_size_bytes`, which is truthful
-            # immediately regardless of readers.
-            try:
-                with self._lock:
-                    self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            except Exception as exc:
-                logger.debug(
-                    "WAL checkpoint (TRUNCATE) after optimize VACUUM failed: %s",
-                    exc,
-                )
+            # Shared-WAL lifecycle operations remain outside ordinary optimize.
 
         # Phase 4: stamp the FTS storage layout as current, clear the "available"
         # flag, and advance schema_version if it was somehow still behind (the
@@ -10766,11 +10756,6 @@ class SessionDB:
             logger.warning("FTS optimize before VACUUM failed: %s", exc)
         # VACUUM cannot be executed inside a transaction.
         with self._lock:
-            # Best-effort WAL checkpoint first, then VACUUM.
-            try:
-                self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            except Exception as exc:
-                logger.debug("WAL checkpoint (TRUNCATE) before VACUUM failed: %s", exc)
             self._conn.execute("VACUUM")
         return optimized
 
